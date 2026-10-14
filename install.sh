@@ -18,6 +18,8 @@ PORT=8081
 PANEL_PORT=8090
 DOMAIN=''
 PANEL_DOMAIN=''
+CADDY_DOMAIN=''
+SKIP_PANEL_DOMAIN=0
 PANEL_PASSWORD=''
 MODE='menu'
 INTERACTIVE=1
@@ -93,18 +95,23 @@ prompt_port() {
 
 prompt_domain() {
   local choice answer default_choice=2
+  local existing_domain=''
+  if [[ -z "$DOMAIN" ]] && [[ -f "$CADDY_FILE" ]] && grep -Fq '# >>> gemini-web2api managed >>>' "$CADDY_FILE"; then
+    existing_domain="$(managed_caddy_domain || true)"
+    [[ -z "$existing_domain" ]] || DOMAIN="$existing_domain"
+  fi
   [[ -n "$DOMAIN" ]] && default_choice=1
   while true; do
-    read_default '是否绑定域名？输入 1=绑定，2=不绑定（仅本机/SSH 隧道）' "$default_choice" choice
+    read_default '是否通过域名公开管理面板？输入 1=公开面板，2=面板仅本机/SSH 隧道' "$default_choice" choice
     case "$choice" in
       1)
         while true; do
           read_default '请输入已解析到本服务器的域名' "$DOMAIN" answer
-          if valid_domain "$answer"; then DOMAIN="$answer"; return; fi
+          if valid_domain "$answer"; then DOMAIN="$answer"; SKIP_PANEL_DOMAIN=0; return; fi
           say '域名格式不正确，请重新输入。'
         done
         ;;
-      2) DOMAIN=''; return ;;
+      2) DOMAIN=''; SKIP_PANEL_DOMAIN=1; return ;;
       *) say '选项无效，请输入 1 或 2。' ;;
     esac
   done
@@ -218,7 +225,8 @@ status_mode() {
 
 preflight() {
   valid_port "$PORT" || fail '端口必须是 1024 到 65535 之间的整数。'
-  PANEL_DOMAIN="$DOMAIN"
+  PANEL_DOMAIN=''
+  CADDY_DOMAIN=''
   local existing_managed_domain=''
   if [[ -f "$CADDY_FILE" ]] && grep -Fq '# >>> gemini-web2api managed >>>' "$CADDY_FILE"; then
     existing_managed_domain="$(managed_caddy_domain)" || fail '无法识别现有的 Caddy 管理站点；请检查 Caddyfile。'
@@ -226,20 +234,22 @@ preflight() {
     if [[ -n "$DOMAIN" && "$DOMAIN" != "$existing_managed_domain" ]]; then
       fail "当前 Caddy 管理站点是 $existing_managed_domain；请使用该域名，或先手动迁移站点。"
     fi
-    PANEL_DOMAIN="$existing_managed_domain"
+    CADDY_DOMAIN="$existing_managed_domain"
+    [[ "$SKIP_PANEL_DOMAIN" -eq 1 ]] || PANEL_DOMAIN="$existing_managed_domain"
   elif [[ -n "$DOMAIN" ]]; then
     valid_domain "$DOMAIN" || fail '域名格式不正确。'
     [[ -f "$CADDY_FILE" ]] || fail "选择了域名，但未找到 $CADDY_FILE。"
     if grep -Eq "^[[:space:]]*${DOMAIN//./\.}[[:space:]]*\{" "$CADDY_FILE"; then
       fail "Caddy 中已经存在 $DOMAIN 站点配置；为避免重复，已停止。"
     fi
-    PANEL_DOMAIN="$DOMAIN"
+    CADDY_DOMAIN="$DOMAIN"
+    [[ "$SKIP_PANEL_DOMAIN" -eq 1 ]] || PANEL_DOMAIN="$DOMAIN"
   fi
-  if [[ -n "$PANEL_DOMAIN" ]]; then
-    valid_domain "$PANEL_DOMAIN" || fail '现有 Caddy 域名格式无效。'
+  if [[ -n "$CADDY_DOMAIN" ]]; then
+    valid_domain "$CADDY_DOMAIN" || fail '现有 Caddy 域名格式无效。'
     command -v caddy >/dev/null 2>&1 || fail '未找到 Caddy 命令。'
     systemctl is-active --quiet caddy || fail '现有 Caddy 服务未运行。'
-    getent ahostsv4 "$PANEL_DOMAIN" >/dev/null 2>&1 || fail "域名 $PANEL_DOMAIN 没有可解析的 IPv4 记录；请先配置 DNS。"
+    getent ahostsv4 "$CADDY_DOMAIN" >/dev/null 2>&1 || fail "域名 $CADDY_DOMAIN 没有可解析的 IPv4 记录；请先配置 DNS。"
   fi
   if ss -ltn 2>/dev/null | awk -v suffix=":$PORT" 'index($4,suffix)>0 {found=1} END {exit !found}' && [[ ! -f "$UNIT_FILE" ]]; then
     fail "端口 $PORT 已被其他服务占用，请选择其他端口。"
@@ -304,21 +314,24 @@ PY
 }
 
 write_managed_caddy_block() {
-  python3 - "$CADDY_FILE" "$PANEL_DOMAIN" "$effective_port" "$PANEL_PORT" <<'PY'
+  python3 - "$CADDY_FILE" "$CADDY_DOMAIN" "$PANEL_DOMAIN" "$effective_port" "$PANEL_PORT" <<'PY'
 import os,pathlib,re,stat,sys,tempfile
-path=pathlib.Path(sys.argv[1]); domain,api_port,panel_port=sys.argv[2],sys.argv[3],sys.argv[4]
+path=pathlib.Path(sys.argv[1]); domain,panel_domain,api_port,panel_port=sys.argv[2],sys.argv[3],sys.argv[4],sys.argv[5]
 start='# >>> gemini-web2api managed >>>'; end='# <<< gemini-web2api managed <<<'
 text=path.read_text(encoding='utf-8')
-block=f'''{start}
-{domain} {{
-    encode zstd gzip
-    route {{
-        @panel_root path /panel
+panel_route=''
+if panel_domain:
+    panel_route=f'''        @panel_root path /panel
         redir @panel_root /panel/ 308
         handle_path /panel/* {{
             reverse_proxy 127.0.0.1:{panel_port}
         }}
-        @native_api path /v1beta/*
+'''
+block=f'''{start}
+{domain} {{
+    encode zstd gzip
+    route {{
+{panel_route}        @native_api path /v1beta/*
         respond @native_api "此服务暂不通过公网开放 Gemini 原生接口" 404
         reverse_proxy 127.0.0.1:{api_port}
     }}
@@ -506,9 +519,9 @@ EOF_PANEL_UNIT
   }
 
   say '【7/8】配置域名反代和 HTTPS……'
-  if [[ -n "$PANEL_DOMAIN" ]]; then
+  if [[ -n "$CADDY_DOMAIN" ]]; then
     local dns_ips backup
-    dns_ips="$(getent ahostsv4 "$PANEL_DOMAIN" | awk '{print $1}' | sort -u | tr '\n' ' ')"
+    dns_ips="$(getent ahostsv4 "$CADDY_DOMAIN" | awk '{print $1}' | sort -u | tr '\n' ' ')"
     say "域名解析结果：$dns_ips（请确认最终指向本服务器）"
     backup="$CADDY_FILE.bak-gemini-web2api-$(date +%Y%m%d-%H%M%S)"
     cp -a "$CADDY_FILE" "$backup"
@@ -551,11 +564,11 @@ PY
   say "监听地址：127.0.0.1:$local_port"
   curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:$PANEL_PORT/api/session" || fail '本机管理面板接口未通过。'
   say "管理面板：运行于 127.0.0.1:$PANEL_PORT"
-  if [[ -n "$PANEL_DOMAIN" ]]; then
+  if [[ -n "$CADDY_DOMAIN" ]]; then
     local code='' attempt
     say '正在检查 HTTPS（首次申请证书可能需要一些时间）……'
     for attempt in $(seq 1 12); do
-      code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "https://$PANEL_DOMAIN/" 2>/dev/null || true)"
+      code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "https://$CADDY_DOMAIN/" 2>/dev/null || true)"
       [[ "$code" =~ ^2[0-9][0-9]$ ]] && break
       sleep 5
     done
@@ -571,7 +584,7 @@ if [[ -n "$PANEL_DOMAIN" ]]; then
 else
   say '管理面板：本机 http://127.0.0.1:8090/（可用 SSH 隧道转发 8090）'
 fi
-python3 - "$CONFIG_FILE" "$PANEL_DOMAIN" <<'PY'
+python3 - "$CONFIG_FILE" "$CADDY_DOMAIN" <<'PY'
 import json,sys
 c=json.load(open(sys.argv[1]))
 print('接口地址：'+('https://'+sys.argv[2]+'/v1' if sys.argv[2] else 'http://127.0.0.1:'+str(c['port'])+'/v1（仅本机或 SSH 隧道）'))
@@ -592,9 +605,9 @@ main() {
   if [[ "$MODE" == status ]]; then status_mode; return; fi
   preflight
   if [[ "$MODE" == dry-run ]]; then
-    say "【预演】系统：${PRETTY_NAME:-Debian 12}；安装目录：$APP_DIR；端口：$PORT；面板域名：${PANEL_DOMAIN:-不绑定}"
+    say "【预演】系统：${PRETTY_NAME:-Debian 12}；安装目录：$APP_DIR；API 域名：${CADDY_DOMAIN:-不绑定}；面板域名：${PANEL_DOMAIN:-仅本机/SSH 隧道}"
     say '计划：安装 API 和管理面板；创建受限服务账户、随机 API Key 与随机面板密码。'
-    [[ -z "$PANEL_DOMAIN" ]] || say '计划：备份并更新现有 Caddy 配置，反代 API/面板并阻止公网访问未鉴权的 Gemini 原生接口。'
+    [[ -z "$CADDY_DOMAIN" ]] || say '计划：备份并更新现有 Caddy 配置，反代 API/面板并阻止公网访问未鉴权的 Gemini 原生接口。'
     say '预演完成；没有安装软件或更改服务器配置。'
     return
   fi
@@ -603,7 +616,8 @@ main() {
     say ''
     say "目标系统：${PRETTY_NAME:-Debian 12}"
     say "服务端口：$PORT"
-    if [[ -n "$PANEL_DOMAIN" ]]; then say "API 地址：https://$PANEL_DOMAIN/v1；管理面板：https://$PANEL_DOMAIN/panel/"; else say '访问方式：仅本机 / SSH 隧道'; fi
+    if [[ -n "$CADDY_DOMAIN" ]]; then say "API 地址：https://$CADDY_DOMAIN/v1"; else say 'API 访问方式：仅本机 / SSH 隧道'; fi
+    if [[ -n "$PANEL_DOMAIN" ]]; then say "管理面板：https://$PANEL_DOMAIN/panel/"; else say '管理面板：仅本机 / SSH 隧道'; fi
     local confirm
     read_tty '确认开始安装/更新？输入 Y 继续，其他输入取消：' confirm
     [[ "${confirm,,}" == y ]] || { say '已取消，未执行安装。'; return; }
