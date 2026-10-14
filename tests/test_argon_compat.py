@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class ArgonCompatTests(unittest.TestCase):
     def test_patch_is_idempotent_and_reversible(self):
         installer = (ROOT / "install.sh").read_text(encoding="utf-8")
+        self.assertIn('systemctl restart "$SERVICE.service"', installer)
+        self.assertIn('systemctl restart gemini-web2api-panel.service', installer)
         match = re.search(
             r"patch_argon_model\(\) \{\s+python3 - \"\$APP_DIR/gemini_web2api/models\.py\" \"\$1\" <<'PY'\n(.*?)\nPY\n}",
             installer,

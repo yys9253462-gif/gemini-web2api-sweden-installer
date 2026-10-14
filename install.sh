@@ -514,7 +514,8 @@ WantedBy=multi-user.target
 EOF
   chmod 0644 "$UNIT_FILE"
   systemctl daemon-reload
-  systemctl enable --now "$SERVICE.service"
+  systemctl enable "$SERVICE.service"
+  systemctl restart "$SERVICE.service"
   sleep 2
   systemctl is-active --quiet "$SERVICE.service" || {
     say '错误：服务启动失败，下面是系统诊断日志：'
@@ -557,7 +558,8 @@ WantedBy=multi-user.target
 EOF_PANEL_UNIT
   chmod 0644 "$PANEL_UNIT_FILE"
   systemctl daemon-reload
-  systemctl enable --now gemini-web2api-panel.service
+  systemctl enable gemini-web2api-panel.service
+  systemctl restart gemini-web2api-panel.service
   sleep 1
   systemctl is-active --quiet gemini-web2api-panel.service || {
     say '错误：管理面板启动失败，以下为诊断日志：'
