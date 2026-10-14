@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Gemini Web2API · 控制台</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <section id="login-view" class="login-shell">
+    <div class="login-mark"><span class="mark-glyph">G</span><span>GEMINI<span class="slash">/</span>OPS</span></div>
+    <div class="login-card">
+      <p class="eyebrow">LOCAL CONTROL PLANE · 01</p>
+      <h1>进入管理控制台</h1>
+      <p class="muted">输入安装时生成的面板密码。此面板仅用于管理本机 Gemini Web2API。</p>
+      <form id="login-form">
+        <label for="login-password">管理员密码</label>
+        <input id="login-password" type="password" autocomplete="current-password" required autofocus>
+        <button class="button button-primary full" type="submit">解锁控制台 <span>↗</span></button>
+      </form>
+      <p id="login-error" class="form-error" role="alert"></p>
+      <div class="login-foot"><span class="live-dot"></span> 面板只监听本机回环地址</div>
+    </div>
+    <div class="login-version">GEMINI WEB2API <span>DEBIAN 12</span></div>
+  </section>
+
+  <div id="app-view" class="app-shell hidden">
+    <aside class="sidebar">
+      <a class="brand" href="#overview" aria-label="Gemini Ops 首页">
+        <span class="brand-glyph">G</span>
+        <span class="brand-type">GEMINI<span class="slash">/</span>OPS<small>WEB2API CONSOLE</small></span>
+      </a>
+      <div class="side-label">工作区 / WORKSPACE</div>
+      <nav class="nav-list" aria-label="管理功能">
+        <button class="nav-item active" data-page="overview"><span class="nav-icon">⌂</span>运行总览<span class="nav-end">01</span></button>
+        <button class="nav-item" data-page="account"><span class="nav-icon">◉</span>账号接入<span class="nav-end">02</span></button>
+        <button class="nav-item" data-page="settings"><span class="nav-icon">⚙</span>API 配置<span class="nav-end">03</span></button>
+        <button class="nav-item" data-page="playground"><span class="nav-icon">⌘</span>在线测试<span class="nav-end">04</span></button>
+        <button class="nav-item" data-page="logs"><span class="nav-icon">≋</span>服务日志<span class="nav-end">05</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="host-chip"><span class="live-dot"></span><span><b>LOCAL INSTANCE</b><small id="sidebar-domain">正在读取域名…</small></span></div>
+        <button id="logout-button" class="nav-item logout"><span class="nav-icon">↪</span>退出面板</button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div><span class="crumb">GEMINI / OPS</span><span class="crumb-sep">/</span><span id="page-title" class="crumb-current">运行总览</span></div>
+        <div class="top-actions"><span class="top-secure"><span class="live-dot"></span>管理会话已加密</span><button id="password-button" class="icon-button" title="修改面板密码" aria-label="修改面板密码">⌑</button></div>
+      </header>
+
+      <div class="content-wrap">
+        <section class="page active" id="page-overview">
+          <div class="page-heading">
+            <div><p class="eyebrow">SYSTEM / OVERVIEW</p><h1>运行总览<span class="heading-period">.</span></h1><p class="muted">服务、账号会话与 API 入口，一屏掌握。</p></div>
+            <button id="refresh-button" class="button button-quiet"><span>↻</span> 刷新状态</button>
+          </div>
+          <div class="status-ribbon"><div class="status-orb" id="service-orb"></div><div class="status-ribbon-copy"><span class="status-kicker">API SERVICE</span><strong id="service-status">检查中…</strong></div><span class="ribbon-divider"></span><div class="status-ribbon-copy"><span class="status-kicker">UPSTREAM ACCOUNT</span><strong id="account-status">检查中…</strong></div><div class="ribbon-spacer"></div><button id="restart-button" class="button button-dark">重启 API <span>↻</span></button></div>
+          <div class="metric-grid">
+            <article class="metric-card"><div class="metric-head"><span>API 健康状态</span><span class="metric-index">A / 01</span></div><div id="api-health" class="metric-value">—</div><div class="metric-foot">本机回环探测 · 127.0.0.1</div></article>
+            <article class="metric-card"><div class="metric-head"><span>默认模型</span><span class="metric-index">A / 02</span></div><div id="default-model" class="metric-value metric-model">—</div><div class="metric-foot">可在 API 配置中更改</div></article>
+            <article class="metric-card"><div class="metric-head"><span>API 密钥</span><span class="metric-index">A / 03</span></div><div id="api-key-summary" class="metric-value">—</div><div class="metric-foot">密钥内容不会在页面回显</div></article>
+          </div>
+          <div class="overview-grid">
+            <article class="panel-card endpoint-card"><div class="card-heading"><div><p class="eyebrow">CLIENT CONNECTION</p><h2>客户端接入地址</h2></div><span class="card-badge">OPENAI COMPATIBLE</span></div><div class="endpoint-row"><code id="api-url">读取中…</code><button id="copy-url" class="button button-outline">复制</button></div><p class="helper">在 Cherry Studio、OpenAI SDK 等客户端中填写此 Base URL，并使用下方的 API Key。</p><div class="endpoint-note"><span class="note-icon">i</span><span>面板与 API 使用不同的登录凭据。面板密码不等于客户端 API Key。</span></div></article>
+            <article class="panel-card setup-card"><div class="card-heading"><div><p class="eyebrow">FIRST-RUN CHECKLIST</p><h2>首次配置</h2></div><span class="step-count" id="setup-count">0 / 2</span></div><button class="check-row" data-go="account"><span class="checkmark" id="cookie-check">○</span><span><b>连接 Gemini 账号</b><small id="cookie-check-copy">添加浏览器 Cookie 以使用自己的会话</small></span><span class="row-arrow">→</span></button><button class="check-row" data-go="settings"><span class="checkmark" id="api-check">○</span><span><b>确认 API 配置</b><small>模型、超时和临时聊天偏好</small></span><span class="row-arrow">→</span></button></article>
+          </div>
+        </section>
+
+        <section class="page" id="page-account">
+          <div class="page-heading"><div><p class="eyebrow">ACCOUNT / SESSION</p><h1>账号接入<span class="heading-period">.</span></h1><p class="muted">面板只保存会话 Cookie，不会把现有 Cookie 回显到浏览器。</p></div><span id="cookie-badge" class="card-badge">未配置</span></div>
+          <div class="account-layout">
+            <article class="panel-card form-card"><div class="card-heading"><div><p class="eyebrow">GEMINI WEB SESSION</p><h2>更新浏览器 Cookie</h2></div><span class="step-count">STEP 01</span></div>
+              <label for="cookie-input">Cookie 字符串</label><textarea id="cookie-input" rows="5" placeholder="SID=…; HSID=…; SAPISID=…; __Secure-1PSID=…"></textarea>
+              <p class="helper">请在已登录 Gemini 的浏览器开发者工具中复制 Cookie。出于安全原因，已保存的 Cookie 不会显示在这里；粘贴新值可替换现有会话。</p>
+              <div class="form-grid"><div><label for="auth-user">Google 账号序号 <span class="optional">可选</span></label><input id="auth-user" type="text" inputmode="numeric" placeholder="例如 0 或 1"><p class="field-hint">Gemini 页面地址为 <code>/u/1/…</code> 时填写 1。</p></div><div><label for="xsrf-token">XSRF Token <span class="optional">按需填写</span></label><input id="xsrf-token" type="password" autocomplete="off" placeholder="SNlM0e（遇到 XSRF 错误再填写）"><p class="field-hint">为空表示保留当前值；若要清除，请勾选右侧清除项。</p></div></div>
+              <label class="check-control"><input id="clear-xsrf" type="checkbox"><span>清除已保存的 XSRF Token</span></label>
+              <div class="form-actions"><button id="save-cookie" class="button button-primary">保存 Cookie 并重启 API <span>↗</span></button><span class="save-hint">保存后会安全重启 API 服务</span></div>
+            </article>
+            <aside class="panel-card guide-card"><p class="eyebrow">SESSION GUIDE</p><h2>连接步骤</h2><ol class="guide-list"><li><span>01</span><div><b>登录 Gemini</b><p>在浏览器打开 gemini.google.com 并确认账号可正常对话。</p></div></li><li><span>02</span><div><b>复制 Cookie</b><p>开发者工具 → Application → Cookies → gemini.google.com。</p></div></li><li><span>03</span><div><b>粘贴并保存</b><p>Cookie 属于登录凭据，仅在此服务器保存；不要发给他人。</p></div></li></ol><div class="guide-warning"><span>!</span><p>Cookie 可能过期。Pro 路由还要求账号具备相应的 Gemini 订阅。</p></div></aside>
+          </div>
+        </section>
+
+        <section class="page" id="page-settings">
+          <div class="page-heading"><div><p class="eyebrow">API / CONFIGURATION</p><h1>API 配置<span class="heading-period">.</span></h1><p class="muted">调整运行参数。保存后会重启 API，密钥和 Cookie 不会显示。</p></div><span class="card-badge">LIVE CONFIG</span></div>
+          <div class="settings-grid">
+            <article class="panel-card form-card"><div class="card-heading"><div><p class="eyebrow">GENERATION</p><h2>生成参数</h2></div></div>
+              <label for="model-input">默认模型</label><input id="model-input" type="text" value="gemini-3.6-flash" maxlength="100"><p class="field-hint">支持 gemini-3.6-flash、gemini-3.1-pro 等上游映射名称。</p>
+              <div class="form-grid three"><div><label for="timeout-input">请求超时（秒）</label><input id="timeout-input" type="number" min="10" max="600"></div><div><label for="retry-input">重试次数</label><input id="retry-input" type="number" min="1" max="10"></div><div><label for="delay-input">重试间隔（秒）</label><input id="delay-input" type="number" min="0" max="60"></div></div>
+              <label class="toggle-row"><span><b>临时聊天</b><small>不将请求保存到 Gemini 网页历史</small></span><input id="temporary-input" type="checkbox"><span class="toggle-ui"></span></label>
+              <label for="proxy-input">上游代理 <span class="optional">可选</span></label><input id="proxy-input" type="text" placeholder="http://127.0.0.1:7890"><p id="proxy-hint" class="field-hint">支持 http://、https:// 或 socks5://；代理中的用户名/密码不会回显。</p><label class="check-control"><input id="clear-proxy" type="checkbox"><span>清除当前已配置代理</span></label>
+              <div class="form-actions"><button id="save-settings" class="button button-primary">保存设置并重启 <span>↗</span></button></div>
+            </article>
+            <article class="panel-card key-card"><div class="card-heading"><div><p class="eyebrow">CLIENT AUTH</p><h2>API Key</h2></div><span class="card-badge">PRIVATE</span></div><div class="key-preview"><span>当前密钥</span><code id="key-preview">读取中…</code></div><p class="helper">密钥仅显示脱敏预览。轮换后旧密钥立即失效，请同步更新所有客户端。</p><button id="rotate-key" class="button button-danger-outline">轮换 API Key</button><div id="new-key-box" class="new-key-box hidden"><label>新密钥（仅显示一次）</label><div class="endpoint-row"><code id="new-key-value"></code><button id="copy-key" class="button button-outline">复制</button></div><p class="field-hint">请立即保存；离开本页后将无法再次查看。</p></div></article>
+          </div>
+        </section>
+
+        <section class="page" id="page-playground">
+          <div class="page-heading"><div><p class="eyebrow">PLAYGROUND / REQUEST</p><h1>在线测试<span class="heading-period">.</span></h1><p class="muted">提交一条真实请求到 Gemini 上游，检查账号与代理链路。</p></div><span class="card-badge">USES UPSTREAM QUOTA</span></div>
+          <article class="panel-card playground-card"><div class="form-grid"><div><label for="test-model">模型</label><input id="test-model" type="text" value="gemini-3.6-flash"></div><div class="align-end"><span class="field-hint">此操作会消耗上游请求额度。</span></div></div><label for="test-prompt">测试内容</label><textarea id="test-prompt" rows="4">请简短回复：Gemini Web2API 已连通。</textarea><button id="run-test" class="button button-primary">发送测试请求 <span>↗</span></button><div id="test-result" class="test-result hidden"><div class="result-head"><span>模型响应</span><span id="test-result-model"></span></div><pre id="test-result-content"></pre></div></article>
+        </section>
+
+        <section class="page" id="page-logs">
+          <div class="page-heading"><div><p class="eyebrow">SYSTEMD / JOURNAL</p><h1>服务日志<span class="heading-period">.</span></h1><p class="muted">最近的 API 服务日志。日志内容按原样显示。</p></div><button id="refresh-logs" class="button button-quiet"><span>↻</span>刷新日志</button></div>
+          <article class="panel-card logs-card"><div class="logs-head"><span><i class="live-dot"></i> gemini-web2api.service</span><select id="log-lines"><option value="50">最近 50 行</option><option value="100" selected>最近 100 行</option><option value="200">最近 200 行</option></select></div><pre id="logs-output" class="logs-output">点击“刷新日志”读取。</pre></article>
+        </section>
+      </div>
+      <footer class="footer"><span>GEMINI / OPS</span><span>DEBIAN 12 · LOOPBACK CONTROL</span></footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <dialog id="password-dialog" class="dialog"><form method="dialog" id="password-form"><div class="dialog-head"><div><p class="eyebrow">SECURITY / ADMIN</p><h2>修改面板密码</h2></div><button class="icon-button" value="cancel" aria-label="关闭">×</button></div><p class="muted">建议使用至少 14 位的独立密码。修改后当前登录会话仍有效。</p><label for="new-panel-password">新密码</label><input id="new-panel-password" type="password" minlength="14" autocomplete="new-password" required><div class="dialog-actions"><button class="button button-quiet" value="cancel">取消</button><button id="save-panel-password" class="button button-primary" type="button">更新密码</button></div></form></dialog>
+</body>
+</html>

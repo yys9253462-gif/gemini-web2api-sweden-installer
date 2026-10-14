@@ -27,7 +27,10 @@ sudo bash install.sh
 - 使用上游 `requirements.txt` 安装运行依赖，不尝试构建整个源码包；避免 `pip install .[streaming]` 触发的多顶层包自动发现错误。
 - 创建独立系统用户和 systemd 服务；应用仅绑定 `127.0.0.1`，不会公开应用端口。
 - 首次安装生成随机 API Key，配置保存在 `/etc/gemini-web2api/config.json`，权限为 `0640`；默认启用临时聊天。
+- 同时安装独立的中文 Web 管理面板：首次登录引导 Gemini Cookie 配置，并可查看状态/日志、修改运行参数、轮换 API Key、在线测试请求和重启 API。面板由独立的登录密码保护，密码哈希保存在本机配置中。
 - 域名模式会备份 `/etc/caddy/Caddyfile`、追加站点、校验并热加载；失败会还原原配置。
+- 面板服务只绑定 `127.0.0.1:8090`，通过 Caddy 的 `/panel/` 路径访问；初始管理员密码随机生成并只在安装输出显示。面板登录后使用 HttpOnly/SameSite 会话 Cookie 和 CSRF 校验。
+- 面板为本仓库独立实现，采用本地静态页面 + 管理 API；没有复制参考项目的代码或素材。
 - 域名模式会在 Caddy 层屏蔽公网 `/v1beta/*`，以规避上游当前原生 API 路由未纳入同一鉴权检查的问题。OpenAI 兼容 `/v1/*` 仍使用配置中的 API Key。
 - 安装后验证本机健康接口、loopback 监听，以及 `/v1/models` 无密钥返回 401、带密钥返回 200。
 - 如果项目目录已有不同仓库、未提交改动或非快进上游更新，脚本会停止，不覆盖现有源代码。
@@ -58,16 +61,24 @@ bash install.sh --help
 ## 安装结果
 
 - 上游代码：`/opt/gemini-web2api`
+- 面板代码：`/opt/gemini-web2api-panel/panel/`
 - 服务配置：`/etc/gemini-web2api/config.json`
+- 面板配置：`/etc/gemini-web2api/panel.json`（只保存 PBKDF2 密码哈希）
 - systemd：`gemini-web2api.service`
+- 面板 systemd：`gemini-web2api-panel.service`
 - 服务端口：默认 `127.0.0.1:8081`
+- 面板端口：`127.0.0.1:8090`（不直接暴露公网）
 - 日志：`journalctl -u gemini-web2api -n 100 --no-pager`
+- 面板日志：`journalctl -u gemini-web2api-panel -n 100 --no-pager`
 
-安装结束时会显示接口密钥，请妥善保存。绑定域名时，API 地址为 `https://域名/v1`。不绑定域名时，服务只在服务器本机开放；远程客户端需自行建立 SSH 隧道，例如：
+安装结束时会显示 API Key 和首次面板密码，请分别妥善保存。绑定域名时，API 地址为 `https://域名/v1`，面板地址为 `https://域名/panel/`。不绑定域名时，API 和面板只在服务器本机开放；远程访问可建立 SSH 隧道：
 
 ```bash
 ssh -N -L 8081:127.0.0.1:8081 用户名@服务器地址
+ssh -N -L 8090:127.0.0.1:8090 用户名@服务器地址
 ```
+
+隧道建立后，浏览器访问 `http://127.0.0.1:8090/` 打开面板。
 
 ## 前提与限制
 

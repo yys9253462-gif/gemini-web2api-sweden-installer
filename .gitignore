@@ -5,3 +5,5 @@ cookie.txt
 *.key
 *.token
 .env
+__pycache__/
+*.py[cod]
