@@ -28,6 +28,7 @@ sudo bash install.sh
 - 创建独立系统用户和 systemd 服务；应用仅绑定 `127.0.0.1`，不会公开应用端口。
 - 首次安装生成随机 API Key，配置保存在 `/etc/gemini-web2api/config.json`，权限为 `0640`；默认模型为 `gemini-4-argon`，默认启用临时聊天。安装器会给上游 Gemini Web API 增加此模型别名，并映射到网页端 Pro 模式。
 - 工具调用兼容补丁会把上游文本式工具调用整理成 OpenAI `tool_calls`；流式响应使用带 `index` 的标准 SSE tool-call delta 和 `finish_reason=tool_calls`。API 只返回工具调用请求，实际本地工具仍由接入的 Agent 在本机执行。
+- 工具调用增强补丁（`patches/patch_tool_calling.py`）：兼容 `` ```json ``、`` ```function_call ``、`<tool_call>` 和裸 JSON 等多种工具调用写法（只认请求中声明的工具名）；在长 Agent 提示词末尾追加工具使用提醒；工具结果按 `tool_call_id` 补全工具名；当模型没调用工具、反而让用户自己去执行命令时，自动重试一次。对 `/v1/chat/completions` 和 `/v1/responses` 均生效。
 - 同时安装独立的中文 Web 管理面板：账号接入支持直接粘贴浏览器导出的 Cookie JSON 数组（自动筛选 Google/Gemini 域名下未过期的 Cookie），也兼容 Cookie 字符串；并可查看状态/日志、修改运行参数、轮换 API Key、在线测试请求、检测模型路由和重启 API。路由检测会明确区分“请求生成成功”和“Google 实际模型 ID 可核验”；上游未返回模型 ID 时不会把网关回显别名误报为已验证。面板由独立的登录密码保护，密码哈希保存在本机配置中。
 - 域名模式会备份 `/etc/caddy/Caddyfile`、追加站点、校验并热加载；失败会还原原配置。
 - 面板服务只绑定 `127.0.0.1:8090`，通过 Caddy 的 `/panel/` 路径访问；初始管理员密码随机生成并只在安装输出显示。面板登录后使用 HttpOnly/SameSite 会话 Cookie 和 CSRF 校验。
