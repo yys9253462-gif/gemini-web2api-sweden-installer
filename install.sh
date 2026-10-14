@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 UPSTREAM='https://github.com/Sophomoresty/gemini-web2api.git'
 APP_DIR='/opt/gemini-web2api'
+SERVICE_HOME='/var/lib/gemini-web2api'
 CONFIG_DIR='/etc/gemini-web2api'
 CONFIG_FILE="$CONFIG_DIR/config.json"
 UNIT_FILE='/etc/systemd/system/gemini-web2api.service'
@@ -198,17 +199,38 @@ preflight() {
   if ss -ltn 2>/dev/null | awk -v suffix=":$PORT" 'index($4,suffix)>0 {found=1} END {exit !found}' && [[ ! -f "$UNIT_FILE" ]]; then
     fail "端口 $PORT 已被其他服务占用，请选择其他端口。"
   fi
+  if [[ -e "$APP_DIR" ]] && [[ ! -d "$APP_DIR/.git" ]]; then
+    local old_home=''
+    if id "$SERVICE" >/dev/null 2>&1; then old_home="$(getent passwd "$SERVICE" | cut -d: -f6)"; fi
+    [[ "$old_home" == "$APP_DIR" ]] || fail "$APP_DIR 已存在且不是目标 Git 仓库或本安装器的服务账户目录；为保护原文件，未覆盖。"
+  fi
 }
 
 install_or_update() {
+  local old_home recovery_dir
   say '【1/6】检查并安装系统依赖……'
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
   apt-get install -y -qq git python3 python3-venv python3-pip curl openssl ca-certificates iproute2
 
   say '【2/6】准备服务账户和目录……'
-  id "$SERVICE" >/dev/null 2>&1 || useradd --system --user-group --home-dir "$APP_DIR" --create-home --shell /usr/sbin/nologin "$SERVICE"
-  install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$APP_DIR" "$APP_DIR/.cache"
+  if id "$SERVICE" >/dev/null 2>&1; then
+    old_home="$(getent passwd "$SERVICE" | cut -d: -f6)"
+    if [[ "$old_home" == "$APP_DIR" ]] && [[ ! -d "$APP_DIR/.git" ]] && [[ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+      install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$SERVICE_HOME"
+      recovery_dir="$SERVICE_HOME/recovered-old-home-$(date +%Y%m%d%H%M%S)"
+      [[ ! -e "$recovery_dir" ]] || fail "恢复目录已存在：$recovery_dir；请重试稍后安装。"
+      mv "$APP_DIR" "$recovery_dir"
+      usermod --home "$SERVICE_HOME" "$SERVICE"
+      say "发现上次失败留下的服务账户目录，已保留在 $recovery_dir；继续安装。"
+    elif [[ "$old_home" != "$SERVICE_HOME" ]]; then
+      install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$SERVICE_HOME"
+      usermod --home "$SERVICE_HOME" "$SERVICE"
+    fi
+  else
+    useradd --system --user-group --home-dir "$SERVICE_HOME" --create-home --shell /usr/sbin/nologin "$SERVICE"
+  fi
+  install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$APP_DIR"
   install -d -o root -g "$SERVICE" -m 0750 "$CONFIG_DIR"
 
   say '【3/6】下载或安全更新上游项目……'
@@ -224,6 +246,7 @@ install_or_update() {
   else
     sudo -u "$SERVICE" git clone -q --depth=1 --branch main "$UPSTREAM" "$APP_DIR"
   fi
+  install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$APP_DIR/.cache"
   grep -qxF '/.venv/' "$APP_DIR/.git/info/exclude" 2>/dev/null || printf '/.venv/\n' >> "$APP_DIR/.git/info/exclude"
   chown -R "$SERVICE:$SERVICE" "$APP_DIR"
 
@@ -395,8 +418,8 @@ main() {
     say "服务端口：$PORT"
     if [[ -n "$DOMAIN" ]]; then say "访问域名：https://$DOMAIN/v1"; else say '访问方式：仅本机 / SSH 隧道'; fi
     local confirm
-    read_tty '确认开始安装/更新？输入“是”继续，其他输入取消：' confirm
-    [[ "$confirm" == '是' || "${confirm,,}" == y ]] || { say '已取消，未执行安装。'; return; }
+    read_tty '确认开始安装/更新？输入 Y 继续，其他输入取消：' confirm
+    [[ "${confirm,,}" == y ]] || { say '已取消，未执行安装。'; return; }
   fi
   ensure_root_install
   install_or_update
