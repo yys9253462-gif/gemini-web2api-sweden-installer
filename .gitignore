@@ -1,0 +1,7 @@
+# Runtime credentials and local deployment state
+config.json
+cookie.txt
+*.pem
+*.key
+*.token
+.env
