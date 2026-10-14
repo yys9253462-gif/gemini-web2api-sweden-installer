@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -28,6 +29,7 @@ SERVICE_NAME = os.environ.get("GEMINI_WEB2API_SERVICE", "gemini-web2api.service"
 BIND_HOST = os.environ.get("GEMINI_PANEL_HOST", "127.0.0.1")
 BIND_PORT = int(os.environ.get("GEMINI_PANEL_PORT", "8090"))
 TEST_MODE = os.environ.get("GEMINI_PANEL_TEST_MODE") == "1"
+MODEL_MODE_NAMES = {1: "FAST", 2: "THINKING", 3: "PRO", 4: "AUTO", 5: "FAST_DYNAMIC_THINKING", 6: "FLASH_LITE"}
 SESSION_TTL = 30 * 60
 MAX_BODY = 32 * 1024
 PBKDF2_ROUNDS = 310_000
@@ -429,6 +431,8 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
                 self._json(200 if ok else 503, {"ok": ok, "message": message})
             elif path == "/api/test":
                 self._test_api(body)
+            elif path == "/api/model-detection":
+                self._model_detection()
             elif path == "/api/password":
                 self._change_password(body)
             else:
@@ -580,6 +584,86 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
             self._json(502, {"ok": False, "message": e.read(4000).decode("utf-8", "replace")})
         except Exception as e:
             self._json(502, {"ok": False, "message": str(e)[:1500]})
+
+    def _model_detection(self) -> None:
+        cfg = _read_json(CONFIG_PATH)
+        model = cfg.get("default_model", "gemini-4-argon")
+        keys = cfg.get("api_keys") or []
+        if not isinstance(model, str) or not model or not keys or not isinstance(keys[0], str):
+            self._error(503, "缺少默认模型或 API Key，无法执行检测")
+            return
+
+        mode = None
+        if TEST_MODE:
+            mode = 3 if model == "gemini-4-argon" else None
+        else:
+            app_dir = Path(os.environ.get("GEMINI_WEB2API_APP_DIR", "/opt/gemini-web2api"))
+            if str(app_dir) not in sys.path:
+                sys.path.insert(0, str(app_dir))
+            try:
+                from gemini_web2api.models import MODELS
+                mode = (MODELS.get(model) or {}).get("mode")
+            except Exception:
+                mode = None
+
+        probe = "PANEL-ROUTE-CHECK-" + secrets.token_hex(8)
+        request_body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "Reply exactly with " + probe}],
+            "stream": False,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{int(cfg.get('port', 8081))}/v1/chat/completions",
+            data=request_body,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {keys[0]}"},
+            method="POST",
+        )
+        try:
+            if TEST_MODE:
+                result = {"model": model, "choices": [{"message": {"content": probe}}]}
+                status = 200
+            else:
+                with urllib.request.urlopen(req, timeout=min(int(cfg.get("request_timeout_sec", 180)), 90)) as response:
+                    status = response.status
+                    result = json.loads(response.read(256 * 1024).decode("utf-8"))
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            route_ok = status == 200 and isinstance(content, str) and probe in content
+            self._json(200 if route_ok else 502, {
+                "ok": route_ok,
+                "configured_model": model,
+                "route_mode": mode,
+                "route_mode_name": MODEL_MODE_NAMES.get(mode, "未识别"),
+                "route_status": status,
+                "probe_matched": bool(route_ok),
+                "adapter_model_echo": result.get("model"),
+                "identity_verified": False,
+                "identity_status": "Google 上游未返回可核验的模型 ID",
+                "detail": "已验证模型别名请求能完成生成；网关回显的 model 字段是请求别名，不代表 Google 后端型号。当前上游映射到 Gemini Web 的类别模式，无法据此确认实际返回的是 Argon。",
+            })
+        except urllib.error.HTTPError as error:
+            self._json(502, {
+                "ok": False,
+                "configured_model": model,
+                "route_mode": mode,
+                "route_mode_name": MODEL_MODE_NAMES.get(mode, "未识别"),
+                "route_status": error.code,
+                "probe_matched": False,
+                "identity_verified": False,
+                "identity_status": "未验证",
+                "detail": f"模型路由请求失败（HTTP {error.code}）；未读取或回显上游错误正文。",
+            })
+        except Exception as error:
+            self._json(502, {
+                "ok": False,
+                "configured_model": model,
+                "route_mode": mode,
+                "route_mode_name": MODEL_MODE_NAMES.get(mode, "未识别"),
+                "route_status": 0,
+                "probe_matched": False,
+                "identity_verified": False,
+                "identity_status": "未验证",
+                "detail": f"检测请求异常：{type(error).__name__}",
+            })
 
     def _change_password(self, body: dict) -> None:
         password = body.get("password", "")

@@ -101,7 +101,7 @@ class PanelHttpTests(unittest.TestCase):
     def setUp(self):
         self.cookies.clear()
         config = json.loads(self.config_path.read_text(encoding="utf-8"))
-        config.update({"cookie_file": None, "auth_user": None, "xsrf_token": None})
+        config.update({"cookie_file": None, "auth_user": None, "xsrf_token": None, "default_model": "gemini-4-argon"})
         self.config_path.write_text(json.dumps(config), encoding="utf-8")
         self.cookie_path.unlink(missing_ok=True)
 
@@ -178,6 +178,19 @@ class PanelHttpTests(unittest.TestCase):
         self.assertNotIn("not-google", saved)
         self.assertNotIn("expired", saved)
         self.assertNotIn("bad;delimiter", saved)
+
+    def test_model_detection_separates_route_success_from_identity_proof(self):
+        self.login()
+        status, result = self.request("/api/model-detection", "POST", {})
+        self.assertEqual(status, 200)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["configured_model"], "gemini-4-argon")
+        self.assertEqual(result["route_mode"], 3)
+        self.assertEqual(result["route_mode_name"], "PRO")
+        self.assertTrue(result["probe_matched"])
+        self.assertEqual(result["adapter_model_echo"], "gemini-4-argon")
+        self.assertFalse(result["identity_verified"])
+        self.assertIn("不代表 Google 后端型号", result["detail"])
 
     def test_login_page_and_static_assets_are_public(self):
         self.assertEqual(self.client.open(self.base + "/", timeout=5).status, 200)

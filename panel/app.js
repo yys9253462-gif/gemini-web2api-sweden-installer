@@ -224,6 +224,31 @@ $('run-test').addEventListener('click', async () => {
   finally { done(); }
 });
 
+$('detect-model-button').addEventListener('click', async () => {
+  if (!confirm('这会向 Google 发送一条短测试请求并消耗一次上游额度。继续？')) return;
+  const done = busy($('detect-model-button'), '检测中…');
+  $('model-detection-result').classList.remove('hidden');
+  $('model-detection-status').textContent = '正在检测…';
+  $('model-detection-http').textContent = '';
+  $('model-detection-detail').textContent = '正在检查当前默认模型的 Google 上游路由。';
+  try {
+    const d = await api('/api/model-detection', { method: 'POST', body: '{}' });
+    $('model-detection-status').textContent = d.ok ? '请求路由成功' : '请求路由失败';
+    $('model-detection-http').textContent = d.route_status ? `HTTP ${d.route_status}` : '';
+    $('model-detection-detail').textContent = [
+      `配置模型：${d.configured_model || '—'}`,
+      `Gemini Web 路由：${d.route_mode_name || '未识别'}${d.route_mode == null ? '' : `（mode=${d.route_mode}）`}`,
+      `生成探针：${d.probe_matched ? '通过' : '未通过'}`,
+      `网关 model 回显：${d.adapter_model_echo || '无'}（这是适配器回显，不是 Google 的型号证明）`,
+      `Google 实际模型 ID：${d.identity_verified ? '已确认' : (d.identity_status || '未确认')}`,
+      d.detail || '',
+    ].filter(Boolean).join('\n');
+  } catch (error) {
+    $('model-detection-status').textContent = '检测失败';
+    $('model-detection-detail').textContent = error.message;
+  } finally { done(); }
+});
+
 $('password-button').addEventListener('click', () => $('password-dialog').showModal());
 $('save-panel-password').addEventListener('click', async () => {
   const password = $('new-panel-password').value;
