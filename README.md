@@ -24,6 +24,7 @@ sudo bash install.sh
 
 - 仅支持 Debian 12；自动安装 Git、Python 及虚拟环境依赖。
 - 从上游 [`Sophomoresty/gemini-web2api`](https://github.com/Sophomoresty/gemini-web2api) 克隆或安全快进更新。
+- 使用上游 `requirements.txt` 安装运行依赖，不尝试构建整个源码包；避免 `pip install .[streaming]` 触发的多顶层包自动发现错误。
 - 创建独立系统用户和 systemd 服务；应用仅绑定 `127.0.0.1`，不会公开应用端口。
 - 首次安装生成随机 API Key，配置保存在 `/etc/gemini-web2api/config.json`，权限为 `0640`；默认启用临时聊天。
 - 域名模式会备份 `/etc/caddy/Caddyfile`、追加站点、校验并热加载；失败会还原原配置。

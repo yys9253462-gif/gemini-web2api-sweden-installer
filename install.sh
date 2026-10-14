@@ -200,9 +200,10 @@ preflight() {
     fail "端口 $PORT 已被其他服务占用，请选择其他端口。"
   fi
   if [[ -e "$APP_DIR" ]] && [[ ! -d "$APP_DIR/.git" ]]; then
-    local old_home=''
+    local old_home='' app_owner=''
     if id "$SERVICE" >/dev/null 2>&1; then old_home="$(getent passwd "$SERVICE" | cut -d: -f6)"; fi
-    [[ "$old_home" == "$APP_DIR" ]] || fail "$APP_DIR 已存在且不是目标 Git 仓库或本安装器的服务账户目录；为保护原文件，未覆盖。"
+    app_owner="$(stat -c '%U' "$APP_DIR" 2>/dev/null || true)"
+    [[ "$old_home" == "$APP_DIR" || "$app_owner" == "$SERVICE" ]] || fail "$APP_DIR 已存在且不是目标 Git 仓库或本安装器的服务账户目录；为保护原文件，未覆盖。"
   fi
 }
 
@@ -223,11 +224,16 @@ install_or_update() {
       mv "$APP_DIR" "$recovery_dir"
       usermod --home "$SERVICE_HOME" "$SERVICE"
       say "发现上次失败留下的服务账户目录，已保留在 $recovery_dir；继续安装。"
+    elif [[ -e "$APP_DIR" ]] && [[ ! -d "$APP_DIR/.git" ]] && [[ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+      fail "$APP_DIR 已有非仓库文件，不属于旧服务账户主目录；为保护原文件，未覆盖。"
     elif [[ "$old_home" != "$SERVICE_HOME" ]]; then
       install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$SERVICE_HOME"
       usermod --home "$SERVICE_HOME" "$SERVICE"
     fi
   else
+    if [[ -e "$APP_DIR" ]] && [[ ! -d "$APP_DIR/.git" ]] && [[ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+      fail "$APP_DIR 已有文件且不是目标 Git 仓库；为保护原文件，未覆盖。"
+    fi
     useradd --system --user-group --home-dir "$SERVICE_HOME" --create-home --shell /usr/sbin/nologin "$SERVICE"
   fi
   install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$APP_DIR"
@@ -279,7 +285,7 @@ PY
     chmod 0640 "$CONFIG_FILE"
   fi
   sudo -u "$SERVICE" python3 -m venv "$APP_DIR/.venv"
-  (cd "$APP_DIR" && sudo -u "$SERVICE" "$APP_DIR/.venv/bin/python" -m pip install -q --disable-pip-version-check '.[streaming]')
+  sudo -u "$SERVICE" "$APP_DIR/.venv/bin/python" -m pip install -q --disable-pip-version-check -r "$APP_DIR/requirements.txt"
   local effective_port
   effective_port="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["port"])' "$CONFIG_FILE")"
 
