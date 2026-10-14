@@ -106,6 +106,10 @@ patch_tool_stream() {
   python3 "$PANEL_DIR/patches/patch_upstream.py" "$1" "$APP_DIR/gemini_web2api/server.py"
 }
 
+patch_tool_calling() {
+  python3 "$PANEL_DIR/patches/patch_tool_calling.py" "$1" "$APP_DIR/gemini_web2api"
+}
+
 managed_caddy_domain() {
   [[ -f "$CADDY_FILE" ]] || return 0
   python3 - "$CADDY_FILE" <<'PY'
@@ -435,6 +439,7 @@ install_or_update() {
     [[ "$(sudo -u "$SERVICE" git -C "$APP_DIR" remote get-url origin)" == "$UPSTREAM" ]] || fail '安装目录中的仓库来源不符，未覆盖现有文件。'
     [[ "$(sudo -u "$SERVICE" git -C "$APP_DIR" branch --show-current)" == main ]] || fail '上游仓库当前不在 main 分支，未切换分支。'
     patch_argon_model remove || fail '无法安全撤销上一轮 Gemini 4 Argon 兼容补丁。'
+    patch_tool_calling remove || fail '无法安全撤销上一轮工具调用增强补丁。'
     patch_tool_stream remove || fail '无法安全撤销上一轮工具流式兼容补丁。'
     [[ -z "$(sudo -u "$SERVICE" git -C "$APP_DIR" status --porcelain)" ]] || fail '上游目录有未提交更改，未覆盖现有文件。'
     sudo -u "$SERVICE" git -C "$APP_DIR" fetch -q origin main
@@ -447,6 +452,7 @@ install_or_update() {
   fi
   patch_argon_model apply || fail '无法为上游安全添加 Gemini 4 Argon 模型别名。'
   patch_tool_stream apply || fail '无法为上游安全添加 OpenAI 兼容工具流式补丁。'
+  patch_tool_calling apply || fail '无法为上游安全添加工具调用增强补丁。'
   install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$APP_DIR/.cache"
   grep -qxF '/.venv/' "$APP_DIR/.git/info/exclude" 2>/dev/null || printf '/.venv/\n' >> "$APP_DIR/.git/info/exclude"
   chown -R "$SERVICE:$SERVICE" "$APP_DIR"
