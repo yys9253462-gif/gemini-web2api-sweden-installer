@@ -75,8 +75,8 @@
           <div class="page-heading"><div><p class="eyebrow">ACCOUNT / SESSION</p><h1>账号接入<span class="heading-period">.</span></h1><p class="muted">面板只保存会话 Cookie，不会把现有 Cookie 回显到浏览器。</p></div><span id="cookie-badge" class="card-badge">未配置</span></div>
           <div class="account-layout">
             <article class="panel-card form-card"><div class="card-heading"><div><p class="eyebrow">GEMINI WEB SESSION</p><h2>更新浏览器 Cookie</h2></div><span class="step-count">STEP 01</span></div>
-              <label for="cookie-input">Cookie 字符串</label><textarea id="cookie-input" rows="5" placeholder="SID=…; HSID=…; SAPISID=…; __Secure-1PSID=…"></textarea>
-              <p class="helper">请在已登录 Gemini 的浏览器开发者工具中复制 Cookie。出于安全原因，已保存的 Cookie 不会显示在这里；粘贴新值可替换现有会话。</p>
+              <label for="cookie-input">Cookie 字符串 / 浏览器 Cookie JSON</label><textarea id="cookie-input" rows="5" placeholder="粘贴 Cookie 字符串，或浏览器导出的 JSON 数组（[{&quot;domain&quot;:&quot;.google.com&quot;,&quot;name&quot;:&quot;…&quot;,&quot;value&quot;:&quot;…&quot;}]）"></textarea>
+              <p class="helper">支持直接粘贴浏览器扩展导出的 Cookie JSON；面板会筛选未过期的 Google/Gemini Cookie 并转换。也支持 Cookie 字符串。已保存的 Cookie 不会回显；粘贴新值会替换现有会话。</p>
               <div class="form-grid"><div><label for="auth-user">Google 账号序号 <span class="optional">可选</span></label><input id="auth-user" type="text" inputmode="numeric" placeholder="例如 0 或 1"><p class="field-hint">Gemini 页面地址为 <code>/u/1/…</code> 时填写 1。</p></div><div><label for="xsrf-token">XSRF Token <span class="optional">按需填写</span></label><input id="xsrf-token" type="password" autocomplete="off" placeholder="SNlM0e（遇到 XSRF 错误再填写）"><p class="field-hint">为空表示保留当前值；若要清除，请勾选右侧清除项。</p></div></div>
               <label class="check-control"><input id="clear-xsrf" type="checkbox"><span>清除已保存的 XSRF Token</span></label>
               <div class="form-actions"><button id="save-cookie" class="button button-primary">保存 Cookie 并重启 API <span>↗</span></button><span class="save-hint">保存后会安全重启 API 服务</span></div>

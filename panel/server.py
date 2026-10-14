@@ -171,6 +171,65 @@ def _write_config_and_restart(new_cfg: dict, cookie_bytes: bytes | None = None) 
         return False, str(e)
 
 
+def _normalize_cookie_input(raw: str) -> tuple[str, int]:
+    """Accept a Cookie header or a browser-exported cookie JSON array."""
+    raw = raw.strip()
+    if raw.startswith(("[", "{")):
+        try:
+            exported = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Cookie JSON 格式无效") from exc
+        if isinstance(exported, dict):
+            exported = exported.get("cookies")
+        if not isinstance(exported, list):
+            raise ValueError("JSON 必须是 Cookie 数组，或包含 cookies 数组的对象")
+
+        now = time.time()
+        selected: dict[str, tuple[int, str]] = {}
+        for item in exported:
+            if not isinstance(item, dict):
+                continue
+            domain = item.get("domain")
+            name = item.get("name")
+            value = item.get("value")
+            if not all(isinstance(part, str) for part in (domain, name, value)):
+                continue
+            normalized_domain = domain.lstrip(".").lower()
+            if normalized_domain not in {"google.com", "gemini.google.com"}:
+                continue
+            if not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]{1,256}", name):
+                continue
+            # Cookie header values cannot contain delimiters/control chars. Drop
+            # malformed optional cookies (for example analytics entries).
+            if not value or any(ord(ch) < 0x21 or ord(ch) > 0x7E or ch in '";,\\' for ch in value):
+                continue
+            expiry = item.get("expirationDate")
+            if expiry is not None:
+                try:
+                    if float(expiry) <= now:
+                        continue
+                except (TypeError, ValueError, OverflowError):
+                    continue
+            priority = len(normalized_domain)
+            existing = selected.get(name)
+            if existing is None or priority > existing[0]:
+                selected[name] = (priority, value)
+
+        if "__Secure-1PSID" not in selected:
+            raise ValueError("JSON 中没有有效且未过期的 __Secure-1PSID；请确认导出包含 Gemini 登录 Cookie")
+        pairs = [(name, entry[1]) for name, entry in selected.items()]
+        return "; ".join(f"{name}={value}" for name, value in pairs), len(pairs)
+
+    parsed = http.cookies.SimpleCookie()
+    try:
+        parsed.load(raw)
+    except Exception as exc:
+        raise ValueError("Cookie 字符串格式无法解析") from exc
+    if "__Secure-1PSID" not in parsed:
+        raise ValueError("Cookie 中缺少 __Secure-1PSID")
+    return raw, len(parsed)
+
+
 class PanelHandler(http.server.BaseHTTPRequestHandler):
     server_version = "GeminiPanel"
     sys_version = ""
@@ -456,31 +515,29 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
         self._json(200 if ok else 503, {"ok": ok, "message": message, "config": _safe_config() if ok else None})
 
     def _save_cookie(self, body: dict) -> None:
-        cookie = body.get("cookie", "")
-        if not isinstance(cookie, str) or not cookie.strip() or len(cookie) > 16_000:
-            self._error(400, "请填写有效 Cookie（不超过 16 KB）")
+        raw_cookie = body.get("cookie", "")
+        if not isinstance(raw_cookie, str) or not raw_cookie.strip() or len(raw_cookie) > 24_000:
+            self._error(400, "请填写有效 Cookie 字符串或浏览器导出的 JSON（不超过 24 KB）")
             return
-        parsed = http.cookies.SimpleCookie()
         try:
-            parsed.load(cookie)
-        except Exception:
-            self._error(400, "Cookie 格式无法解析")
-            return
-        if "__Secure-1PSID" not in parsed:
-            self._error(400, "Cookie 中缺少 __Secure-1PSID")
+            cookie, cookie_count = _normalize_cookie_input(raw_cookie)
+        except ValueError as exc:
+            self._error(400, str(exc))
             return
         cfg = _read_json(CONFIG_PATH)
         auth_user = body.get("auth_user")
         if auth_user not in (None, "") and (not isinstance(auth_user, str) or not re.fullmatch(r"\d{1,4}", auth_user)):
             self._error(400, "账号序号应为 0-9999 的字符串")
             return
-        xsrf = body.get("xsrf_token", cfg.get("xsrf_token"))
+        xsrf = body.get("xsrf_token", cfg.get("xsrf_token") or "")
         if not isinstance(xsrf, str) or len(xsrf) > 4096:
             self._error(400, "XSRF 字段过长或格式无效")
             return
         cfg["auth_user"] = auth_user or None
         cfg["xsrf_token"] = xsrf or None
-        ok, message = _write_config_and_restart(cfg, cookie.strip().encode("utf-8"))
+        ok, message = _write_config_and_restart(cfg, cookie.encode("utf-8"))
+        if ok:
+            message = f"已保存 {cookie_count} 项 Cookie 并重启 API。{message}".strip()
         self._json(200 if ok else 503, {"ok": ok, "message": message, "config": _safe_config() if ok else None})
 
     def _rotate_key(self) -> None:

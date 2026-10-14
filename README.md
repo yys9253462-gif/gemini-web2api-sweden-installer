@@ -27,7 +27,7 @@ sudo bash install.sh
 - 使用上游 `requirements.txt` 安装运行依赖，不尝试构建整个源码包；避免 `pip install .[streaming]` 触发的多顶层包自动发现错误。
 - 创建独立系统用户和 systemd 服务；应用仅绑定 `127.0.0.1`，不会公开应用端口。
 - 首次安装生成随机 API Key，配置保存在 `/etc/gemini-web2api/config.json`，权限为 `0640`；默认启用临时聊天。
-- 同时安装独立的中文 Web 管理面板：首次登录引导 Gemini Cookie 配置，并可查看状态/日志、修改运行参数、轮换 API Key、在线测试请求和重启 API。面板由独立的登录密码保护，密码哈希保存在本机配置中。
+- 同时安装独立的中文 Web 管理面板：账号接入支持直接粘贴浏览器导出的 Cookie JSON 数组（自动筛选 Google/Gemini 域名下未过期的 Cookie），也兼容 Cookie 字符串；并可查看状态/日志、修改运行参数、轮换 API Key、在线测试请求和重启 API。面板由独立的登录密码保护，密码哈希保存在本机配置中。
 - 域名模式会备份 `/etc/caddy/Caddyfile`、追加站点、校验并热加载；失败会还原原配置。
 - 面板服务只绑定 `127.0.0.1:8090`，通过 Caddy 的 `/panel/` 路径访问；初始管理员密码随机生成并只在安装输出显示。面板登录后使用 HttpOnly/SameSite 会话 Cookie 和 CSRF 校验。
 - 面板为本仓库独立实现，采用本地静态页面 + 管理 API；没有复制参考项目的代码或素材。

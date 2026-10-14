@@ -98,6 +98,13 @@ class PanelHttpTests(unittest.TestCase):
             finally:
                 e.close()
 
+    def setUp(self):
+        self.cookies.clear()
+        config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        config.update({"cookie_file": None, "auth_user": None, "xsrf_token": None})
+        self.config_path.write_text(json.dumps(config), encoding="utf-8")
+        self.cookie_path.unlink(missing_ok=True)
+
     def login(self):
         status, data = self.request("/api/login", "POST", {"password": self.password}, csrf=False)
         self.assertEqual(status, 200)
@@ -152,6 +159,25 @@ class PanelHttpTests(unittest.TestCase):
         self.login()
         status, _ = self.request("/api/service/restart", "POST", {}, csrf=False)
         self.assertEqual(status, 403)
+
+    def test_browser_cookie_json_import_filters_and_normalizes(self):
+        self.login()
+        exported = [
+            {"domain": ".google.com", "name": "__Secure-1PSID", "value": "g.session-cookie", "expirationDate": time.time() + 3600},
+            {"domain": ".google.com", "name": "SAPISID", "value": "broad-sapisid", "expirationDate": time.time() + 3600},
+            {"domain": ".gemini.google.com", "name": "SAPISID", "value": "gemini-sapisid", "expirationDate": time.time() + 3600},
+            {"domain": ".example.com", "name": "IGNORED", "value": "not-google", "expirationDate": time.time() + 3600},
+            {"domain": ".google.com", "name": "OLD", "value": "expired", "expirationDate": time.time() - 1},
+            {"domain": ".google.com", "name": "S", "value": "bad;delimiter", "expirationDate": time.time() + 3600},
+        ]
+        status, result = self.request("/api/cookie", "POST", {"cookie": json.dumps(exported)})
+        self.assertEqual(status, 200, result)
+        self.assertIn("已保存 2 项 Cookie", result["message"])
+        saved = self.cookie_path.read_text(encoding="utf-8")
+        self.assertEqual(saved, "__Secure-1PSID=g.session-cookie; SAPISID=gemini-sapisid")
+        self.assertNotIn("not-google", saved)
+        self.assertNotIn("expired", saved)
+        self.assertNotIn("bad;delimiter", saved)
 
     def test_login_page_and_static_assets_are_public(self):
         self.assertEqual(self.client.open(self.base + "/", timeout=5).status, 200)
