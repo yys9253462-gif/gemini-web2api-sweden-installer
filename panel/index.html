@@ -89,7 +89,7 @@
           <div class="page-heading"><div><p class="eyebrow">API / CONFIGURATION</p><h1>API 配置<span class="heading-period">.</span></h1><p class="muted">调整运行参数。保存后会重启 API，密钥和 Cookie 不会显示。</p></div><span class="card-badge">LIVE CONFIG</span></div>
           <div class="settings-grid">
             <article class="panel-card form-card"><div class="card-heading"><div><p class="eyebrow">GENERATION</p><h2>生成参数</h2></div></div>
-              <label for="model-input">默认模型</label><input id="model-input" type="text" value="gemini-3.6-flash" maxlength="100"><p class="field-hint">支持 gemini-3.6-flash、gemini-3.1-pro 等上游映射名称。</p>
+              <label for="model-input">默认模型</label><input id="model-input" type="text" value="gemini-4-argon" maxlength="100"><p class="field-hint">默认 gemini-4-argon；通过 Gemini Web 的 Pro 模式映射，是否实际分配到 Argon 取决于 Google 账号和网页端当前开放情况。</p>
               <div class="form-grid three"><div><label for="timeout-input">请求超时（秒）</label><input id="timeout-input" type="number" min="10" max="600"></div><div><label for="retry-input">重试次数</label><input id="retry-input" type="number" min="1" max="10"></div><div><label for="delay-input">重试间隔（秒）</label><input id="delay-input" type="number" min="0" max="60"></div></div>
               <label class="toggle-row"><span><b>临时聊天</b><small>不将请求保存到 Gemini 网页历史</small></span><input id="temporary-input" type="checkbox"><span class="toggle-ui"></span></label>
               <label for="proxy-input">上游代理 <span class="optional">可选</span></label><input id="proxy-input" type="text" placeholder="http://127.0.0.1:7890"><p id="proxy-hint" class="field-hint">支持 http://、https:// 或 socks5://；代理中的用户名/密码不会回显。</p><label class="check-control"><input id="clear-proxy" type="checkbox"><span>清除当前已配置代理</span></label>
@@ -101,7 +101,7 @@
 
         <section class="page" id="page-playground">
           <div class="page-heading"><div><p class="eyebrow">PLAYGROUND / REQUEST</p><h1>在线测试<span class="heading-period">.</span></h1><p class="muted">提交一条真实请求到 Gemini 上游，检查账号与代理链路。</p></div><span class="card-badge">USES UPSTREAM QUOTA</span></div>
-          <article class="panel-card playground-card"><div class="form-grid"><div><label for="test-model">模型</label><input id="test-model" type="text" value="gemini-3.6-flash"></div><div class="align-end"><span class="field-hint">此操作会消耗上游请求额度。</span></div></div><label for="test-prompt">测试内容</label><textarea id="test-prompt" rows="4">请简短回复：Gemini Web2API 已连通。</textarea><button id="run-test" class="button button-primary">发送测试请求 <span>↗</span></button><div id="test-result" class="test-result hidden"><div class="result-head"><span>模型响应</span><span id="test-result-model"></span></div><pre id="test-result-content"></pre></div></article>
+          <article class="panel-card playground-card"><div class="form-grid"><div><label for="test-model">模型</label><input id="test-model" type="text" value="gemini-4-argon"></div><div class="align-end"><span class="field-hint">此操作会消耗上游请求额度。</span></div></div><label for="test-prompt">测试内容</label><textarea id="test-prompt" rows="4">请简短回复：Gemini Web2API 已连通。</textarea><button id="run-test" class="button button-primary">发送测试请求 <span>↗</span></button><div id="test-result" class="test-result hidden"><div class="result-head"><span>模型响应</span><span id="test-result-model"></span></div><pre id="test-result-content"></pre></div></article>
         </section>
 
         <section class="page" id="page-logs">

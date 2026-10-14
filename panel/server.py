@@ -124,7 +124,7 @@ def _safe_config() -> dict:
     return {
         "host": cfg.get("host", "127.0.0.1"),
         "port": cfg.get("port", 8081),
-        "default_model": cfg.get("default_model", "gemini-3.6-flash"),
+        "default_model": cfg.get("default_model", "gemini-4-argon"),
         "retry_attempts": cfg.get("retry_attempts", 3),
         "retry_delay_sec": cfg.get("retry_delay_sec", 2),
         "request_timeout_sec": cfg.get("request_timeout_sec", 180),
@@ -559,7 +559,7 @@ class PanelHandler(http.server.BaseHTTPRequestHandler):
                 self._error(400, "模型名称格式无效")
                 return
         else:
-            model = cfg.get("default_model", "gemini-3.6-flash")
+            model = cfg.get("default_model", "gemini-4-argon")
         keys = cfg.get("api_keys") or []
         if not keys:
             self._error(503, "当前没有配置 API Key")

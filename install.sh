@@ -66,6 +66,42 @@ valid_domain() {
   [[ ${#1} -le 253 && "$1" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
 }
 
+patch_argon_model() {
+  python3 - "$APP_DIR/gemini_web2api/models.py" "$1" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+action = sys.argv[2]
+if not path.is_file():
+    raise SystemExit(f'上游模型映射文件不存在：{path}')
+text = path.read_text(encoding='utf-8')
+needle = 'MODELS = {\n'
+block = '''    # >>> gemini-web2api-sweden-installer: Gemini 4 Argon alias >>>
+    "gemini-4-argon": {
+        "mode": 3, "think": 4,
+        "desc": "Gemini 4 Argon (Gemini Web Pro category)",
+    },
+    # <<< gemini-web2api-sweden-installer: Gemini 4 Argon alias <<<
+'''
+if action == 'remove':
+    if 'gemini-web2api-sweden-installer: Gemini 4 Argon alias' in text:
+        if block not in text:
+            raise SystemExit('Gemini 4 Argon 本地补丁内容发生变化；为保护文件，未自动移除。')
+        path.write_text(text.replace(block, '', 1), encoding='utf-8')
+elif action == 'apply':
+    if 'gemini-web2api-sweden-installer: Gemini 4 Argon alias' in text:
+        if block not in text:
+            raise SystemExit('Gemini 4 Argon 本地补丁内容异常。')
+    elif '"gemini-4-argon"' not in text:
+        if text.count(needle) != 1:
+            raise SystemExit('上游 MODELS 映射结构与预期不符；未注入别名。')
+        path.write_text(text.replace(needle, needle + block, 1), encoding='utf-8')
+else:
+    raise SystemExit('patch_argon_model 仅支持 remove/apply')
+PY
+}
+
 managed_caddy_domain() {
   [[ -f "$CADDY_FILE" ]] || return 0
   python3 - "$CADDY_FILE" <<'PY'
@@ -391,6 +427,7 @@ install_or_update() {
   if [[ -d "$APP_DIR/.git" ]]; then
     [[ "$(sudo -u "$SERVICE" git -C "$APP_DIR" remote get-url origin)" == "$UPSTREAM" ]] || fail '安装目录中的仓库来源不符，未覆盖现有文件。'
     [[ "$(sudo -u "$SERVICE" git -C "$APP_DIR" branch --show-current)" == main ]] || fail '上游仓库当前不在 main 分支，未切换分支。'
+    patch_argon_model remove || fail '无法安全撤销上一轮 Gemini 4 Argon 兼容补丁。'
     [[ -z "$(sudo -u "$SERVICE" git -C "$APP_DIR" status --porcelain)" ]] || fail '上游目录有未提交更改，未覆盖现有文件。'
     sudo -u "$SERVICE" git -C "$APP_DIR" fetch -q origin main
     sudo -u "$SERVICE" git -C "$APP_DIR" merge-base --is-ancestor HEAD FETCH_HEAD || fail '上游不是本地代码的快进更新，未覆盖现有文件。'
@@ -400,6 +437,7 @@ install_or_update() {
   else
     sudo -u "$SERVICE" git clone -q --depth=1 --branch main "$UPSTREAM" "$APP_DIR"
   fi
+  patch_argon_model apply || fail '无法为上游安全添加 Gemini 4 Argon 模型别名。'
   install -d -o "$SERVICE" -g "$SERVICE" -m 0750 "$APP_DIR/.cache"
   grep -qxF '/.venv/' "$APP_DIR/.git/info/exclude" 2>/dev/null || printf '/.venv/\n' >> "$APP_DIR/.git/info/exclude"
   chown -R "$SERVICE:$SERVICE" "$APP_DIR"
@@ -412,7 +450,7 @@ install_or_update() {
 import json,sys
 path,port,key=sys.argv[1],int(sys.argv[2]),sys.argv[3]
 cfg={"host":"127.0.0.1","port":port,"retry_attempts":3,"retry_delay_sec":2,
-     "request_timeout_sec":180,"default_model":"gemini-3.6-flash",
+     "request_timeout_sec":180,"default_model":"gemini-4-argon",
      "auth_user":None,"xsrf_token":None,"log_requests":True,
      "cookie_file":None,"proxy":None,"api_keys":[key],"temporary_chats":True}
 with open(path,"w") as f: json.dump(cfg,f,indent=2); f.write("\n")
@@ -421,13 +459,22 @@ PY
     chmod 0640 "$CONFIG_FILE"
   else
     python3 - "$CONFIG_FILE" <<'PY'
-import json,sys
+import json,os,shutil,sys,tempfile
+from pathlib import Path
+from datetime import datetime
 c=json.load(open(sys.argv[1]))
 if c.get('host') != '127.0.0.1': raise SystemExit('现有配置不是仅本机监听；为避免公网暴露，已停止。')
 keys=c.get('api_keys')
 if not isinstance(keys,list) or not keys or not all(isinstance(k,str) and k for k in keys):
     raise SystemExit('现有配置没有有效 api_keys；为避免免密访问，已停止。')
 if not isinstance(c.get('port'),int) or not (1024 <= c['port'] <= 65535): raise SystemExit('现有配置端口无效。')
+if c.get('default_model') in ('gemini-3.6-flash','gemini-3.7-flash',None,''):
+    path=Path(sys.argv[1]); backup=path.with_name(path.name+'.bak-'+datetime.now().strftime('%Y%m%d%H%M%S'))
+    shutil.copy2(path,backup)
+    c['default_model']='gemini-4-argon'
+    fd,tmp=tempfile.mkstemp(prefix='.'+path.name+'.',dir=str(path.parent))
+    with os.fdopen(fd,'w',encoding='utf-8') as f: json.dump(c,f,ensure_ascii=False,indent=2); f.write('\n'); f.flush(); os.fsync(f.fileno())
+    os.chmod(tmp,0o640); os.replace(tmp,path)
 PY
     chown root:"$SERVICE" "$CONFIG_FILE"
     chmod 0640 "$CONFIG_FILE"

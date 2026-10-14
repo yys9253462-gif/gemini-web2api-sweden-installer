@@ -31,7 +31,7 @@ class PanelHttpTests(unittest.TestCase):
         api_key = "sk-" + secrets.token_urlsafe(24)
         cls.proxy_password = secrets.token_urlsafe(12)
         cls.config_path.write_text(json.dumps({
-            "host": "127.0.0.1", "port": 8081, "default_model": "gemini-3.6-flash",
+            "host": "127.0.0.1", "port": 8081, "default_model": "gemini-4-argon",
             "retry_attempts": 3, "retry_delay_sec": 2, "request_timeout_sec": 180,
             "temporary_chats": True, "auth_user": None, "xsrf_token": None,
             "proxy": "http://user:" + cls.proxy_password + "@proxy.example:8080", "cookie_file": None, "api_keys": [api_key],
