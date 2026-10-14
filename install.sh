@@ -241,11 +241,11 @@ install_or_update() {
 
   say '【3/6】下载或安全更新上游项目……'
   if [[ -d "$APP_DIR/.git" ]]; then
-    [[ "$(git -C "$APP_DIR" remote get-url origin)" == "$UPSTREAM" ]] || fail '安装目录中的仓库来源不符，未覆盖现有文件。'
-    [[ "$(git -C "$APP_DIR" branch --show-current)" == main ]] || fail '上游仓库当前不在 main 分支，未切换分支。'
-    [[ -z "$(git -C "$APP_DIR" status --porcelain)" ]] || fail '上游目录有未提交更改，未覆盖现有文件。'
+    [[ "$(sudo -u "$SERVICE" git -C "$APP_DIR" remote get-url origin)" == "$UPSTREAM" ]] || fail '安装目录中的仓库来源不符，未覆盖现有文件。'
+    [[ "$(sudo -u "$SERVICE" git -C "$APP_DIR" branch --show-current)" == main ]] || fail '上游仓库当前不在 main 分支，未切换分支。'
+    [[ -z "$(sudo -u "$SERVICE" git -C "$APP_DIR" status --porcelain)" ]] || fail '上游目录有未提交更改，未覆盖现有文件。'
     sudo -u "$SERVICE" git -C "$APP_DIR" fetch -q origin main
-    git -C "$APP_DIR" merge-base --is-ancestor HEAD FETCH_HEAD || fail '上游不是本地代码的快进更新，未覆盖现有文件。'
+    sudo -u "$SERVICE" git -C "$APP_DIR" merge-base --is-ancestor HEAD FETCH_HEAD || fail '上游不是本地代码的快进更新，未覆盖现有文件。'
     sudo -u "$SERVICE" git -C "$APP_DIR" merge --quiet --ff-only FETCH_HEAD
   elif [[ -e "$APP_DIR" ]] && [[ -n "$(find "$APP_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
     fail "$APP_DIR 已存在非空目录且不是目标 Git 仓库，未覆盖。"
